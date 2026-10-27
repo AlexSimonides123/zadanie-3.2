@@ -65,8 +65,8 @@ public partial class MainWindow : Window
             selected.Title = title;
             selected.Content = content;
             selected.SavedAt = DateTime.Now;
-            NotesList.ItemsSource = null;
-            NotesList.ItemsSource = _notes;
+            _notes.Remove(selected);
+            _notes.Insert(0, selected);
             NotesList.SelectedItem = selected;
         }
         else
@@ -77,7 +77,7 @@ public partial class MainWindow : Window
                 Content = content,
                 SavedAt = DateTime.Now
             };
-            _notes.Add(note);
+            _notes.Insert(0, note);
             _loadingSelection = true;
             NotesList.SelectedItem = note;
             _loadingSelection = false;
