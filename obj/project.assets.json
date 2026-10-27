@@ -1664,7 +1664,7 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\simonides.alex\\.nuget\\packages\\": {},
+    "C:\\Users\\simonides.alex\\AppData\\Local\\Temp\\cursor-sandbox-cache\\1d39d100cb47aeebdb674be3bdde230e\\nuget": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
@@ -1673,7 +1673,7 @@
       "projectUniqueName": "C:\\Users\\simonides.alex\\Desktop\\3.2\\notatnik\\notatnik.csproj",
       "projectName": "notatnik",
       "projectPath": "C:\\Users\\simonides.alex\\Desktop\\3.2\\notatnik\\notatnik.csproj",
-      "packagesPath": "C:\\Users\\simonides.alex\\.nuget\\packages\\",
+      "packagesPath": "C:\\Users\\simonides.alex\\AppData\\Local\\Temp\\cursor-sandbox-cache\\1d39d100cb47aeebdb674be3bdde230e\\nuget",
       "outputPath": "C:\\Users\\simonides.alex\\Desktop\\3.2\\notatnik\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
