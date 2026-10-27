@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -9,13 +10,13 @@ namespace notatnik;
 
 public static class NoteStore
 {
-    private const string HeaderSeparator = " — ";
+    private const char EmDash = '\u2014';
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     private static readonly Regex HeaderPattern = new(
-        @"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+[—–-]\s+(.+)$",
+        @"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) \u2014 (.+)$",
         RegexOptions.Compiled);
 
-    public static string FilePath { get; } = Path.Combine(FindProjectFolder(), "notatki.md");
+    public static string FilePath { get; } = ResolveNotesPath();
 
     public static List<Note> Load()
     {
@@ -29,91 +30,75 @@ public static class NoteStore
 
     public static List<Note> AddNew(string title, string content)
     {
-        var note = new Note
-        {
-            Title = title,
-            Content = content,
-            SavedAt = DateTime.Now
-        };
+        var block = FormatEntry(DateTime.Now, title, content);
+        var previous = ReadExisting();
 
-        var notes = Load();
-        var raw = File.Exists(FilePath) ? File.ReadAllText(FilePath, Utf8) : string.Empty;
+        var text = previous.Length == 0
+            ? block
+            : block + "\n" + previous;
 
-        if (notes.Count == 0 && !string.IsNullOrWhiteSpace(raw))
-        {
-            File.WriteAllText(FilePath, FormatNote(note) + "\n" + StripBom(raw), Utf8);
-            return Load();
-        }
-
-        notes.Insert(0, note);
-        WriteAll(notes);
-        return notes;
+        File.WriteAllText(FilePath, text, Utf8);
+        return Load();
     }
 
-    public static List<Note> Update(Note original, string title, string content)
+    private static string ReadExisting()
     {
-        var notes = Load();
-        var index = notes.FindIndex(note => SameEntry(note, original));
-        if (index >= 0)
+        if (!File.Exists(FilePath))
         {
-            notes.RemoveAt(index);
+            return string.Empty;
         }
 
-        notes.Insert(0, new Note
-        {
-            Title = title,
-            Content = content,
-            SavedAt = DateTime.Now
-        });
+        var existing = StripBom(File.ReadAllText(FilePath, Utf8))
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n')
+            .TrimStart('\n');
 
-        WriteAll(notes);
-        return notes;
+        return existing;
     }
 
-    private static bool SameEntry(Note left, Note right) =>
-        left.Title == right.Title &&
-        FormatTimestamp(left.SavedAt) == FormatTimestamp(right.SavedAt);
-
-    private static void WriteAll(List<Note> notes)
+    private static string FormatEntry(DateTime savedAt, string title, string content)
     {
+        var header =
+            savedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+            + " "
+            + EmDash
+            + " "
+            + NormalizeTitle(title);
+
+        var bodyLines = BodyLines(content);
         var builder = new StringBuilder();
-        for (var i = 0; i < notes.Count; i++)
+        builder.Append(header);
+        builder.Append('\n');
+        builder.Append('\n');
+
+        for (var i = 0; i < bodyLines.Count; i++)
         {
-            builder.Append(FormatNote(notes[i]));
-            if (i < notes.Count - 1)
+            builder.Append(bodyLines[i]);
+            builder.Append('\n');
+            if (i < bodyLines.Count - 1)
             {
                 builder.Append('\n');
             }
         }
 
-        File.WriteAllText(FilePath, builder.ToString(), Utf8);
-    }
-
-    private static string FormatNote(Note note)
-    {
-        var builder = new StringBuilder();
-        builder.Append(FormatTimestamp(note.SavedAt));
-        builder.Append(HeaderSeparator);
-        builder.Append(note.Title);
-        builder.Append('\n');
-        builder.Append('\n');
-
-        var content = (note.Content ?? string.Empty).Replace("\r\n", "\n").TrimEnd('\n', '\r');
-        if (content.Length > 0)
-        {
-            builder.Append(content);
-            builder.Append('\n');
-        }
-
         return builder.ToString();
     }
 
-    private static string FormatTimestamp(DateTime value) =>
-        value.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+    private static List<string> BodyLines(string? content) =>
+        (content ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n')
+            .Split('\n')
+            .Select(line => line.TrimEnd())
+            .Where(line => line.Length > 0)
+            .ToList();
+
+    private static string NormalizeTitle(string title) =>
+        title.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ').Trim();
 
     private static List<Note> Parse(string text)
     {
-        var lines = StripBom(text).Replace("\r\n", "\n").Split('\n');
+        var lines = StripBom(text).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         var notes = new List<Note>();
 
         for (var i = 0; i < lines.Length;)
@@ -150,15 +135,10 @@ public static class NoteStore
                 i++;
             }
 
-            while (contentLines.Count > 0 && contentLines[^1].Length == 0)
-            {
-                contentLines.RemoveAt(contentLines.Count - 1);
-            }
-
             notes.Add(new Note
             {
                 Title = title,
-                Content = string.Join("\n", contentLines),
+                Content = string.Join("\n", BodyLines(string.Join("\n", contentLines))),
                 SavedAt = savedAt
             });
         }
@@ -169,22 +149,64 @@ public static class NoteStore
     private static string StripBom(string text) =>
         text.Length > 0 && text[0] == '\uFEFF' ? text[1..] : text;
 
-    private static string FindProjectFolder()
+    private static string ResolveNotesPath()
     {
-        foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
-        {
-            var directory = new DirectoryInfo(Path.GetFullPath(start));
-            while (directory is not null)
-            {
-                if (File.Exists(Path.Combine(directory.FullName, "notatnik.csproj")))
-                {
-                    return directory.FullName;
-                }
+        string? projectFolder = null;
+        string? notesBesideProject = null;
 
-                directory = directory.Parent;
+        foreach (var folder in CandidateFolders())
+        {
+            var notesPath = Path.Combine(folder, "notatki.md");
+            var hasProject = Directory.GetFiles(folder, "*.csproj").Length > 0;
+
+            if (hasProject)
+            {
+                projectFolder ??= folder;
+                if (File.Exists(notesPath))
+                {
+                    notesBesideProject ??= notesPath;
+                }
             }
         }
 
-        return Directory.GetCurrentDirectory();
+        if (notesBesideProject is not null)
+        {
+            return notesBesideProject;
+        }
+
+        if (projectFolder is not null)
+        {
+            return Path.Combine(projectFolder, "notatki.md");
+        }
+
+        return Path.Combine(Directory.GetCurrentDirectory(), "notatki.md");
+    }
+
+    private static IEnumerable<string> CandidateFolders()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+        {
+            DirectoryInfo? folder;
+            try
+            {
+                folder = new DirectoryInfo(Path.GetFullPath(start));
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            while (folder is not null)
+            {
+                if (seen.Add(folder.FullName))
+                {
+                    yield return folder.FullName;
+                }
+
+                folder = folder.Parent;
+            }
+        }
     }
 }

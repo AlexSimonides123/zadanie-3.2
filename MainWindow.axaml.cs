@@ -61,11 +61,7 @@ public partial class MainWindow : Window
             title = "Bez tytułu";
         }
 
-        var saved = NotesList.SelectedItem is Note selected
-            ? NoteStore.Update(selected, title, content)
-            : NoteStore.AddNew(title, content);
-
-        ReplaceNotes(saved);
+        ReplaceNotes(NoteStore.AddNew(title, content));
     }
 
     private void ReplaceNotes(List<Note> notes)
